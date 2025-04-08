@@ -1,3 +1,4 @@
+mod jpeg;
 mod model;
 mod pdf;
 
