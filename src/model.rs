@@ -4,7 +4,11 @@
 /// A pdfmcr file: a list of pages with annotations.
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct File {
+    /// The pages and their annotations.
     pub pages: Vec<Page>,
+
+    /// The default language for this document, as a BCP 47 language tag.
+    pub default_language: Option<String>,
 }
 
 
@@ -43,8 +47,14 @@ impl From<JpegImage> for Vec<u8> {
 /// A single cohesive annotation on the page that represents actual content.
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Annotation {
+    /// The horizontal coordinate of the annotation, from the left edge of the page.
+    pub left: u64,
+
+    /// The vertical coordinate of the annotation, from the bottom edge of the page.
+    pub bottom: u64,
+
     /// The elements of the annotation.
-    pub elements: Vec<AnnotationElement>,
+    pub elements: Vec<TextChunk>,
 }
 
 /// A single cohesive annotation on the page that represents a non-content element.
@@ -55,8 +65,8 @@ pub struct Artifact {
     /// Preferfined PDF values are `Pagination`
     pub kind: String,
 
-    /// The elements of the annotation.
-    pub elements: Vec<AnnotationElement>,
+    /// The artifact represented as an annotation.
+    pub annotation: Annotation,
 }
 
 /// The type of non-content element represented by an [`Artifact`].
@@ -75,8 +85,36 @@ pub enum ArtifactKind {
     Background,
 }
 
-/// A single element of an annotation.
+/// A chunk of text.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum AnnotationElement {
+pub struct TextChunk {
+    /// The text itself.
+    pub text: String,
 
+    /// Whether the text is typeset in bold font.
+    pub bold: bool,
+
+    /// Whether the text is typeset in italic font.
+    pub italic: bool,
+
+    /// The size of the font, in points (72ths of an inch).
+    pub font_size: u64,
+
+    /// Character spacing.
+    pub character_spacing: u64,
+
+    /// Word spacing.
+    pub word_spacing: u64,
+
+    /// The language of this chunk, as a BCP 47 language tag, if it differs from the default
+    /// document language.
+    pub language: Option<String>,
+
+    /// Alternate text describing this element.
+    pub alternate_text: Option<String>,
+
+    /// TODO: describe
+    pub actual_text: Option<String>,
+
+    // TODO
 }
