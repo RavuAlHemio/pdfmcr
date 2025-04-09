@@ -78,6 +78,7 @@ pub enum Content {
     Page(Page),
     PageContents(PageContents),
     ImageXObject(ImageXObject),
+    StandardFont(StandardFont),
 }
 impl Object for Content {
     fn write_content<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
@@ -87,6 +88,7 @@ impl Object for Content {
             Self::Page(page) => page.write_content(writer),
             Self::PageContents(page_contents) => page_contents.write_content(writer),
             Self::ImageXObject(image_xobject) => image_xobject.write_content(writer),
+            Self::StandardFont(font) => font.write_content(writer),
         }
     }
 }
@@ -97,11 +99,16 @@ impl Object for Content {
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Catalog {
     pub root_pages_id: PdfId,
+    pub lang: Option<String>,
 }
 impl Object for Catalog {
     fn write_content<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
         writer.write_all(b"<</Type/Catalog")?;
         write!(writer, "/Pages {} 0 R", self.root_pages_id.0)?;
+        if let Some(lang) = self.lang.as_ref() {
+            writer.write_all(b"/Lang")?;
+            write_pdf_string(&lang, writer)?;
+        }
         writer.write_all(b">>")?;
         Ok(())
     }
