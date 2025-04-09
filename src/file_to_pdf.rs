@@ -2,6 +2,7 @@
 
 
 use std::collections::BTreeMap;
+use std::io::Write;
 
 use crate::model::File;
 use crate::pdf::{
@@ -92,6 +93,8 @@ pub(crate) fn file_to_pdf(file: &File) -> Document {
         );
 
         let mut commands = Vec::new();
+        // place the image, then the annotations, then the artifacts
+        write!(commands, "q {} 0 0 {} 0 0 cm/Im0 Do Q", width_pt, height_pt).unwrap();
         for annotation in &page.annotations {
             annotation.write_drawing_commands(&mut commands).unwrap();
         }
