@@ -2,7 +2,7 @@
 
 
 use std::collections::BTreeMap;
-use std::io::{self, Write};
+use std::io::{self, Seek, Write};
 
 
 /// The ID of a PDF object.
@@ -16,7 +16,7 @@ pub struct Document {
     /// A mapping from IDs to objects.
     ///
     /// Generation numbers are always 0 in this simplified implementation.
-    pub objects: BTreeMap<u64, Content>,
+    pub objects: BTreeMap<PdfId, Content>,
 }
 impl Document {
     pub fn write_pdf<W: Write + Seek>(&self, writer: &mut W) -> Result<(), io::Error> {
@@ -35,7 +35,7 @@ impl Document {
         }
 
         let max_obj_id = self.objects.keys()
-            .copied()
+            .map(|id| id.0)
             .max()
             .expect("no objects");
 
@@ -44,7 +44,7 @@ impl Document {
         write!(writer, "0 {}\n", max_obj_id + 1)?;
         let mut cur_obj_id = 0;
         for (&id, &xref_offset) in &xref_offsets {
-            while cur_obj_id < id {
+            while cur_obj_id < id.0 {
                 write!(writer, "{:010} 65535 f\r\n", xref_offset)?;
                 cur_obj_id += 1;
             }
@@ -59,8 +59,9 @@ impl Document {
             .expect("no catalog object found");
 
         writer.write_all(b"trailer\n")?;
-        write!(writer, "<</Size {}/Root {} 0 R>>\n", max_obj_id + 1, root_obj_id)?;
+        write!(writer, "<</Size {}/Root {} 0 R>>\n", max_obj_id + 1, root_obj_id.0)?;
         write!(writer, "startxref\n{}\n%%EOF\n", xref_abs - pdf_start_pos)?;
+        Ok(())
     }
 }
 
