@@ -18,6 +18,51 @@ pub struct Document {
     /// Generation numbers are always 0 in this simplified implementation.
     pub objects: BTreeMap<u64, Content>,
 }
+impl Document {
+    pub fn write_pdf<W: Write + Seek>(&self, writer: &mut W) -> Result<(), io::Error> {
+        let pdf_start_pos = writer.stream_position()?;
+
+        // header (magic and binary detection comment line)
+        writer.write_all(b"%PDF-1.5\n%\xE2\xE3\xCF\xD3\n\n")?;
+
+        let mut xref_offsets = BTreeMap::new();
+        for (&id, data) in &self.objects {
+            let object_start_abs = writer.stream_position()?;
+            xref_offsets.insert(id, object_start_abs - pdf_start_pos);
+            write!(writer, "{} 0 obj\n", id.0)?;
+            data.write_content(writer)?;
+            writer.write_all(b"\nendobj\n")?;
+        }
+
+        let max_obj_id = self.objects.keys()
+            .copied()
+            .max()
+            .expect("no objects");
+
+        let xref_abs = writer.stream_position()?;
+        writer.write_all(b"xref\n")?;
+        write!(writer, "0 {}\n", max_obj_id + 1)?;
+        let mut cur_obj_id = 0;
+        for (&id, &xref_offset) in &xref_offsets {
+            while cur_obj_id < id {
+                write!(writer, "{:010} 65535 f\r\n", xref_offset)?;
+                cur_obj_id += 1;
+            }
+            write!(writer, "{:010} 00000 n\r\n", xref_offset)?;
+            cur_obj_id += 1;
+        }
+
+        let root_obj_id = self.objects.iter()
+            .filter(|(_id, data)| matches!(data, Content::Catalog(_)))
+            .map(|(id, _data)| *id)
+            .nth(0)
+            .expect("no catalog object found");
+
+        writer.write_all(b"trailer\n")?;
+        write!(writer, "<</Size {}/Root {} 0 R>>\n", max_obj_id + 1, root_obj_id)?;
+        write!(writer, "startxref\n{}\n%%EOF\n", xref_abs - pdf_start_pos)?;
+    }
+}
 
 /// A PDF object whose content can be written to a byte stream.
 pub trait Object {
