@@ -19,6 +19,11 @@ pub struct Document {
     pub objects: BTreeMap<u64, Content>,
 }
 
+/// A PDF object whose content can be written to a byte stream.
+pub trait Object {
+    fn write_content<W: Write>(&self, writer: &mut W) -> Result<(), io::Error>;
+}
+
 /// The contents of a PDF object.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Content {
@@ -28,6 +33,17 @@ pub enum Content {
     PageContents(PageContents),
     ImageXObject(ImageXObject),
 }
+impl Object for Content {
+    fn write_content<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
+        match self {
+            Self::Catalog(catalog) => catalog.write_content(writer),
+            Self::Pages(pages) => pages.write_content(writer),
+            Self::Page(page) => page.write_content(writer),
+            Self::PageContents(page_contents) => page_contents.write_content(writer),
+            Self::ImageXObject(image_xobject) => image_xobject.write_content(writer),
+        }
+    }
+}
 
 /// A Catalog PDF object, the topmost object in the hierarchical structure.
 ///
@@ -35,6 +51,14 @@ pub enum Content {
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Catalog {
     pub root_pages_id: PdfId,
+}
+impl Object for Catalog {
+    fn write_content<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
+        writer.write_all(b"<</Type/Catalog")?;
+        write!(writer, "/Pages {} 0 R", self.root_pages_id.0)?;
+        writer.write_all(b">>")?;
+        Ok(())
+    }
 }
 
 /// A Pages PDF object, a branch in the page tree.
@@ -45,6 +69,28 @@ pub struct Catalog {
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Pages {
     pub children: Vec<PdfId>,
+}
+impl Object for Pages {
+    fn write_content<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
+        writer.write_all(b"<</Type/Pages")?;
+
+        writer.write_all(b"/Kids[")?;
+        let mut first_child = true;
+        for child_id in &self.children {
+            if first_child {
+                first_child = false;
+            } else {
+                writer.write_all(b" ")?;
+            }
+            write!(writer, "{} 0 R", child_id.0)?;
+        }
+        writer.write_all(b"]")?;
+
+        write!(writer, "/Count {}", self.children.len())?;
+
+        writer.write_all(b">>")?;
+        Ok(())
+    }
 }
 
 /// A Page PDF object, a leaf in the page tree.
@@ -72,12 +118,57 @@ pub struct Page {
     /// Mapping of names to fonts referenced by this page.
     pub font_refs: BTreeMap<String, PdfId>,
 }
+impl Object for Page {
+    fn write_content<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
+        writer.write_all(b"<</Type/Page")?;
+        write!(writer, "/Parent {} 0 R", self.parent.0)?;
+
+        writer.write_all(b"/Resources<</ProcSet[/PDF/Text/ImageB/ImageC/ImageI]")?;
+        if self.xobject_refs.len() > 0 {
+            writer.write_all(b"/XObject<<")?;
+            for (name, id) in &self.xobject_refs {
+                write_pdf_name(name, writer)?;
+                write!(writer, " {} 0 R", id.0)?;
+            }
+            writer.write_all(b">>")?;
+        }
+        if self.font_refs.len() > 0 {
+            writer.write_all(b"/Font<<")?;
+            for (name, id) in &self.xobject_refs {
+                write_pdf_name(name, writer)?;
+                write!(writer, " {} 0 R", id.0)?;
+            }
+            writer.write_all(b">>")?;
+        }
+        writer.write_all(b">>")?;
+
+        write!(writer, "/MediaBox[0 0 {} {}]", self.width_pt, self.height_pt)?;
+        if let Some(contents) = self.contents {
+            write!(writer, "/Contents {} 0 R", contents.0)?;
+        }
+
+        writer.write_all(b">>")?;
+        Ok(())
+    }
+}
 
 /// A stream describing the contents of a PDF page.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PageContents {
     /// The drawing commands, in PDF's postfix operator notation.
-    pub commands: String,
+    ///
+    /// Since we are using inline UTF-16 strings, it's better to consider this a binary string.
+    pub commands: Vec<u8>,
+}
+impl Object for PageContents {
+    fn write_content<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
+        writer.write_all(b"<<")?;
+        write!(writer, "/Length {}", self.commands.len())?;
+        writer.write_all(b">>")?;
+
+        write_pdf_stream(&self.commands, writer)?;
+        Ok(())
+    }
 }
 
 /// An external object (XObject) which is an image.
@@ -106,19 +197,56 @@ pub struct ImageXObject {
     /// The binary data of the image.
     pub data: Vec<u8>,
 }
+impl Object for ImageXObject {
+    fn write_content<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
+        writer.write_all(b"<</Type/XObject/Subtype/Image")?;
+        write!(writer, "/Width {}", self.width)?;
+        write!(writer, "/Height {}", self.height)?;
+
+        writer.write_all(b"/ColorSpace")?;
+        write_pdf_name(self.color_space, writer)?;
+
+        write!(writer, "/BitsPerComponent {}", self.bits_per_component)?;
+        write!(writer, "/Interpolate {}", if self.interpolate { "true" } else { "false" })?;
+
+        if self.data_filters.len() > 0 {
+            writer.write_all(b"/Filter[")?;
+            for data_filter in &self.data_filters {
+                write_pdf_name(data_filter, writer)?;
+            }
+            writer.write_all(b"]")?;
+        }
+
+        write!(writer, "/Length {}", self.data.len())?;
+
+        writer.write_all(b">>")?;
+
+        write_pdf_stream(&self.data, writer)?;
+        Ok(())
+    }
+}
 
 /// One of the standard 14 fonts.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct StandardFont {
-    /// The name of the font.
+    /// The PDF name of the font.
     pub name: String,
+}
+impl Object for StandardFont {
+    fn write_content<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
+        writer.write_all(b"<</Type/Font/Subtype/Type1")?;
+        writer.write_all(b"/BaseFont")?;
+        write_pdf_name(&self.name, writer)?;
+        writer.write_all(b">>")?;
+        Ok(())
+    }
 }
 
 /// Writes out a textual string in PDF format.
 ///
 /// The string is wrapped in parentheses (`(` and `)`), encoded in UTF-16BE with BOM, and all
 /// backslashes and parentheses are escaped with a preceding backslash.
-pub fn write_pdf_string<W: Write>(string: &str, mut writer: W) -> Result<(), io::Error> {
+pub fn write_pdf_string<W: Write>(string: &str, writer: &mut W) -> Result<(), io::Error> {
     const ESCAPE_US: [u16; 3] = [
         b'(' as u16,
         b')' as u16,
@@ -135,5 +263,43 @@ pub fn write_pdf_string<W: Write>(string: &str, mut writer: W) -> Result<(), io:
         writer.write_all(&word_be_bytes)?;
     }
     writer.write_all(b")")?;
+    Ok(())
+}
+
+/// Writes out a PDF name.
+///
+/// The string starts with a slash (`/`). The number sign (`#`) as well as regular characters
+/// outside the range of `!` to `~` are encoded as a hex escape: the number sign and two uppercase
+/// hexadecimal digits.
+///
+/// Regular characters are those that are neither white-space nor delimiter characters. White-space
+/// characters are NUL (U+0000), tab (U+0009), line feed (U+000A), form feed (U+000C), carriage
+/// return (U+000D) and space (U+0020). Delimiter characters are all types of brackets (`()<>[]{}`),
+/// the slash (`/`) and the percent sign (`%`).
+pub fn write_pdf_name<W: Write>(name: &str, writer: &mut W) -> Result<(), io::Error> {
+    const SORTED_BYTES_TO_ESCAPE: [u8; 17] = [
+        // white space characters
+        0x00, 0x09, 0x0A, 0x0C, 0x0D, 0x20,
+        // the escape character
+        b'#',
+        // delimiter characters
+        b'%', b'(', b')', b'/', b'<', b'>', b'[', b']', b'{', b'}',
+    ];
+    writer.write_all(b"/")?;
+    for &b in name.as_bytes() {
+        if SORTED_BYTES_TO_ESCAPE.binary_search(&b).is_ok() {
+            write!(writer, "#{:02X}", b)?;
+        } else {
+            writer.write_all(&[b])?;
+        }
+    }
+    Ok(())
+}
+
+/// Writes out a delimited PDF stream.
+pub fn write_pdf_stream<W: Write>(data: &[u8], writer: &mut W) -> Result<(), io::Error> {
+    writer.write_all(b"\nstream\n")?;
+    writer.write_all(data)?;
+    writer.write_all(b"\nendstream")?;
     Ok(())
 }
