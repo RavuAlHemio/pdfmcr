@@ -64,13 +64,13 @@ pub(crate) fn file_to_pdf(file: &File) -> Document {
         let page_index: u64 = page_index_usize.try_into().unwrap();
         let page_pdf_id = 1 + COMMON_IDS + IDS_PER_PAGE*page_index;
 
-        let width_pt = page.scanned_image.density_unit.try_to_points(
-            page.scanned_image.width,
-            page.scanned_image.density_x,
+        let width_pt = page.scanned_image.info.density_unit.try_to_points(
+            page.scanned_image.info.width,
+            page.scanned_image.info.density_x,
         ).unwrap();
-        let height_pt = page.scanned_image.density_unit.try_to_points(
-            page.scanned_image.height,
-            page.scanned_image.density_y,
+        let height_pt = page.scanned_image.info.density_unit.try_to_points(
+            page.scanned_image.info.height,
+            page.scanned_image.info.density_y,
         ).unwrap();
 
         let mut xobject_refs = BTreeMap::new();
@@ -109,14 +109,17 @@ pub(crate) fn file_to_pdf(file: &File) -> Document {
             Content::PageContents(content),
         );
 
+        let image_data = page.scanned_image.data.read()
+            .expect("failed to read image data")
+            .into_owned();
         let image = ImageXObject {
-            width: page.scanned_image.width.into(),
-            height: page.scanned_image.height.into(),
-            color_space: page.scanned_image.color_space.as_pdf_name(),
-            bits_per_component: page.scanned_image.bit_depth,
+            width: page.scanned_image.info.width.into(),
+            height: page.scanned_image.info.height.into(),
+            color_space: page.scanned_image.info.color_space.as_pdf_name(),
+            bits_per_component: page.scanned_image.info.bit_depth,
             interpolate: true,
             data_filters: vec!["DCTDecode".to_owned()],
-            data: page.scanned_image.data.clone(),
+            data: image_data,
         };
         document.objects.insert(
             PdfId(page_pdf_id + 1),

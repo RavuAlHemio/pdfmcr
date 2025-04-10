@@ -1,10 +1,13 @@
 //! Structures representing data within pdfmcr.
 
 
+use std::borrow::Cow;
 use std::io::{self, Write};
+use std::path::PathBuf;
 
 use from_to_repr::FromToRepr;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::ser::Error;
 
 use crate::pdf::write_pdf_string;
 
@@ -37,11 +40,39 @@ pub struct Page {
     /// content, e.g. page numbers.
     pub artifacts: Vec<Artifact>,
 }
+impl Page {
+    pub fn to_info(&self) -> PageInfo {
+        PageInfo {
+            scanned_image: self.scanned_image.info,
+            annotations: self.annotations.clone(),
+            artifacts: self.artifacts.clone(),
+        }
+    }
+}
 
 
-/// A JPEG image.
+/// Information about a single page with annotations.
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-pub struct JpegImage {
+pub struct PageInfo {
+    /// Information about the scanned image of the page, in JPEG format.
+    pub scanned_image: JpegImageInfo,
+
+    /// The annotations on the page, in reading order.
+    ///
+    /// Annotations represent the actual content.
+    pub annotations: Vec<Annotation>,
+
+    /// The artifacts on the page, in reading order.
+    ///
+    /// Artifacts represent elements that are printed on the page but which are not the actual page
+    /// content, e.g. page numbers.
+    pub artifacts: Vec<Artifact>,
+}
+
+
+/// Information about a JPEG image.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct JpegImageInfo {
     /// The bit depth of the image.
     pub bit_depth: u8,
 
@@ -62,25 +93,108 @@ pub struct JpegImage {
 
     /// The pixel density in the vertical direction (across the height).
     pub density_y: u16,
+}
+
+
+/// A JPEG image.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct JpegImage {
+    /// Information about the image.
+    pub info: JpegImageInfo,
 
     /// The actual full data of the image, in JFIF or Exif formats.
     ///
     /// JFIF and Exif are the most common representations of JPEG files.
-    pub data: Vec<u8>,
+    pub data: ImageData,
 }
 impl JpegImage {
     pub fn write_object_body<W: Write>(&self, mut writer: W) -> Result<(), io::Error> {
+        let length = self.data.len()?;
+        let data = self.data.read()?;
         writer.write_all(b"<</Type/XObject/Subtype/Image")?;
-        write!(writer, "/Width {}", self.width)?;
-        write!(writer, "/Height {}", self.height)?;
-        write!(writer, "/ColorSpace{}", self.color_space.as_pdf_name())?;
-        write!(writer, "/BitsPerComponent {}", self.color_space.as_pdf_name())?;
+        write!(writer, "/Width {}", self.info.width)?;
+        write!(writer, "/Height {}", self.info.height)?;
+        write!(writer, "/ColorSpace{}", self.info.color_space.as_pdf_name())?;
+        write!(writer, "/BitsPerComponent {}", self.info.color_space.as_pdf_name())?;
         writer.write_all(b"/Filter[/DCTDecode]")?;
-        write!(writer, "/Length {}", self.data.len())?;
+        write!(writer, "/Length {}", length)?;
         writer.write_all(b">>\nstream\n")?;
-        writer.write_all(&self.data)?;
+        writer.write_all(&data)?;
         writer.write_all(b">>\nendstream\n")?;
         Ok(())
+    }
+}
+
+/// Binary data, inline or stored in the file system.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum ImageData {
+    /// Image data stored inline.
+    Inline { data: Vec<u8> },
+
+    /// Image data stored in a file in the file system.
+    External { path: PathBuf },
+}
+impl ImageData {
+    pub fn len(&self) -> Result<u64, io::Error> {
+        match self {
+            Self::Inline { data } => Ok(data.len().try_into().unwrap()),
+            Self::External { path } => path.metadata().map(|m| m.len()),
+        }
+    }
+
+    pub fn read(&self) -> Result<Cow<Vec<u8>>, io::Error> {
+        match self {
+            Self::Inline { data } => Ok(Cow::Borrowed(data)),
+            Self::External { path } => {
+                let data = std::fs::read(path)?;
+                Ok(Cow::Owned(data))
+            },
+        }
+    }
+
+    pub fn internalize(&mut self) -> Result<(), io::Error> {
+        match self {
+            Self::Inline { .. } => Ok(()),
+            Self::External { path } => {
+                let data = std::fs::read(&path)?;
+                *self = Self::Inline { data };
+                Ok(())
+            },
+        }
+    }
+
+    pub fn externalize<P: Into<PathBuf>>(&mut self, path: P) -> Result<(), io::Error> {
+        self.internalize()?;
+
+        match self {
+            Self::Inline { data } => {
+                let path_buf = path.into();
+                std::fs::write(&path_buf, data)?;
+                *self = Self::External { path: path_buf };
+                Ok(())
+            },
+            Self::External { .. } => unreachable!(),
+        }
+    }
+}
+impl<'de> Deserialize<'de> for ImageData {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let data: Vec<u8> = Deserialize::deserialize(deserializer)?;
+        Ok(Self::Inline { data })
+    }
+}
+impl Serialize for ImageData {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Inline { data } => {
+                data.serialize(serializer)
+            },
+            Self::External { path } => {
+                let data = std::fs::read(path)
+                    .map_err(|e| S::Error::custom(e))?;
+                data.serialize(serializer)
+            }
+        }
     }
 }
 
@@ -168,7 +282,7 @@ impl Artifact {
 }
 
 /// The type of non-content element represented by an [`Artifact`].
-#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub enum ArtifactKind {
     /// Running heads, folios (page numbers), Bates numbering, etc.
     Pagination,
@@ -300,7 +414,7 @@ impl TextChunk {
 }
 
 /// The variant of a font.
-#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[repr(u8)]
 pub enum FontVariant {
     Regular,
