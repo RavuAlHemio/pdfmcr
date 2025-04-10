@@ -8,6 +8,7 @@ use std::sync::LazyLock;
 
 use askama::Template;
 use rocket;
+use rocket::fs::{FileServer, relative};
 use tokio::sync::RwLock;
 
 
@@ -29,4 +30,6 @@ fn index() -> String {
 fn launch_rocket() -> _ {
     rocket::build()
         .mount("/", rocket::routes![index])
+        .mount("/static", FileServer::from(relative!("static")))
+        .mount("/static/js", FileServer::from(relative!("ts/dist")))
 }

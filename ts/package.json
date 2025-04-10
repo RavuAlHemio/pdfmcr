@@ -1,0 +1,11 @@
+{
+  "name": "pdfmcr-frontend",
+  "packageManager": "yarn@4.9.0",
+  "source": "src/main.ts",
+  "scripts": {
+    "build": "parcel build"
+  },
+  "devDependencies": {
+    "parcel": "^2.14.4"
+  }
+}
