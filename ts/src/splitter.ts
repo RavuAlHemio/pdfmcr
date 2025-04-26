@@ -83,17 +83,32 @@ export namespace Splitter {
     }
 
     function initContainer(container: HTMLElement): void {
+        const panes = <HTMLCollectionOf<HTMLElement>>container.getElementsByClassName("spl-pane");
+        for (const pane of panes) {
+            pane.style.flexGrow = "1";
+            pane.style.flexShrink = "1";
+            pane.style.flexBasis = "auto";
+            pane.style.overflow = "hidden";
+        }
         const splitters = <HTMLCollectionOf<HTMLElement>>container.getElementsByClassName("spl-splitter");
         for (const splitter of splitters) {
+            splitter.style.width = "8px";
+            splitter.style.height = "100%";
+            splitter.style.cursor = "col-resize";
+            splitter.style.userSelect = "none";
             splitter.addEventListener("mousedown", event => activateSplitter(splitter, event));
         }
     }
 
-    export function init(): void {
+    function doInit(): void {
         // initialize each splitter container
         const splitterContainers = document.getElementsByClassName("spl-splitter-container");
         for (const splitterContainer of splitterContainers) {
             initContainer(<HTMLElement>splitterContainer);
         }
+    }
+
+    export function init(): void {
+        document.addEventListener("DOMContentLoaded", doInit);
     }
 }
