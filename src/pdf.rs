@@ -2,7 +2,9 @@
 
 
 use std::collections::BTreeMap;
-use std::io::{self, Seek, Write};
+use std::fs::File;
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::path::PathBuf;
 
 
 /// The ID of a PDF object.
@@ -247,11 +249,16 @@ pub struct ImageXObject {
     /// A list of PDF names of the filters applied to the image, in order.
     pub data_filters: Vec<String>,
 
-    /// The binary data of the image.
-    pub data: Vec<u8>,
+    /// The operating system path to the data of the image.
+    pub os_path: PathBuf,
 }
 impl Object for ImageXObject {
     fn write_content<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
+        // find the image file's size
+        let mut image_file = File::open(&self.os_path)?;
+        let mut file_size = image_file.seek(SeekFrom::End(0))?;
+        image_file.seek(SeekFrom::Start(0))?;
+
         writer.write_all(b"<</Type/XObject/Subtype/Image")?;
         write!(writer, "/Width {}", self.width)?;
         write!(writer, "/Height {}", self.height)?;
@@ -270,11 +277,31 @@ impl Object for ImageXObject {
             writer.write_all(b"]")?;
         }
 
-        write!(writer, "/Length {}", self.data.len())?;
+        write!(writer, "/Length {}", file_size)?;
 
         writer.write_all(b">>")?;
+        writer.write_all(b"\nstream\n")?;
 
-        write_pdf_stream(&self.data, writer)?;
+        let mut buf = vec![0u8; 4*1024*1024];
+        let buf_size_u64: u64 = buf.len().try_into().unwrap();
+        while file_size > 0 {
+            let read_at_most_u64 = file_size.min(buf_size_u64);
+            let read_at_most: usize = read_at_most_u64.try_into().unwrap();
+
+            let actually_read = image_file.read(&mut buf[..read_at_most])?;
+            if actually_read == 0 {
+                // short read
+                return Err(io::ErrorKind::UnexpectedEof.into());
+            }
+
+            let actually_read_u64: u64 = actually_read.try_into().unwrap();
+            file_size -= actually_read_u64;
+
+            writer.write_all(&buf[..actually_read])?;
+        }
+
+        writer.write_all(b"\nendstream")?;
+
         Ok(())
     }
 }

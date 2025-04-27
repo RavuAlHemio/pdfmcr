@@ -1,0 +1,15 @@
+{% extends "_base.html" %}
+
+{% block body %}
+<h1>pdfmcr</h1>
+<p>Welcome to pdfmcr! Upload the first page&#x2019;s background image to start.</p>
+<p>
+  <form action="/page" method="post" enctype="multipart/form-data">
+    <label>
+      Add the first page:
+      <input type="file" name="background-image" required="required" />
+    </label>
+    <input type="submit" value="add" />
+  </form>
+</p>
+{% endblock %}

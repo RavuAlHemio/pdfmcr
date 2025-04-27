@@ -1,0 +1,73 @@
+{% extends "_base.html" %}
+
+{% macro output_annotation(annotation, css_class) %}
+<g class="{{ css_class }}" transform="translate({{ annotation.left }},{{ annotation.bottom }})">
+  <text>
+    {% for element in annotation.elements %}
+      <tspan style="fill:#000;font-size:{{ element.font_size }}pt;letter-spacing:{{ element.character_spacing }}pt;word-spacing:{{ element.word_spacing }};line-height:{{ element.font_size|to_i64 + element.leading }}pt;{{ element.font_variant.as_appended_css_properties() }}">{{ element.text }}</tspan>
+    {% endfor %}
+  </text>
+</g>
+{% endmacro %}
+
+{% block addhead %}
+<meta name="pdfmcr-page-number" value="{{ page_number }}" />
+{% endblock %}
+
+{% block body %}
+<div class="overall-container">
+  <div class="spl-splitter-container" style="display:flex;width:100%;height:100vh">
+    <div class="spl-pane">
+      <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+        <g id="pdfmcr-page-group">
+          <image x="0" y="0" width="{{ page.scanned_image.info.width_pt().unwrap() }}pt" height="{{ page.scanned_image.info.height_pt().unwrap() }}pt" href="/page/{{ page_number }}/image" />
+          {% for annotation in page.annotations %}
+            {% call output_annotation(annotation, "annotation") %}
+          {% endfor %}
+          {% for artifact in page.artifacts %}
+            {% call output_annotation(artifact.annotation, "artifact " ~ artifact.kind.as_css_class()|deref) %}
+          {% endfor %}
+        </g>
+      </svg>
+    </div>
+    <div class="spl-splitter"></div>
+    <div class="spl-pane controls-pane">
+      <details>
+        <summary>Add a page</summary>
+        <form action="/page" method="post" enctype="multipart/form-data">
+          <input type="file" name="background-image" required="required" />
+          <input type="submit" value="add" />
+        </form>
+      </details>
+      <p>
+        {% if page_number > 0 %}
+          <a href="/page/0">&#x21D0;</a>
+          <a href="/page/{{ page_number - 1 }}">&#x2190;</a>
+        {% else %}
+          <span class="inactive-link">&#x21D0;</span>
+          <span class="inactive-link">&#x2190;</span>
+        {% endif %}
+        {% if page_count > 0 && page_number < page_count - 1 %}
+          <a href="/page/{{ page_number + 1 }}">&#x2192;</a>
+          <a href="/page/{{ page_count - 1 }}">&#x21D2;</a>
+        {% else %}
+          <span class="inactive-link">&#x2192;</span>
+          <span class="inactive-link">&#x21D2;</span>
+        {% endif %}
+      </p>
+      <p>
+        <form id="pdfmcr-new-annotation-form" action="javascript:void(0)">
+          <input type="text" />
+          <input type="submit" value="add annotation" />
+        </form>
+      </p>
+      <p>
+        <input type="button" value="reset view" id="pdfmcr-reset-view" />
+      </p>
+      <p>
+        <input type="button" value="save" id="pdfmcr-save" />
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}

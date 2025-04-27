@@ -1,4 +1,4 @@
-import { BadMap, NoValue } from "./badmap.js";
+import { BadMap, NoValue } from "./badmap";
 
 
 interface Position {

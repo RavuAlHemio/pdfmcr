@@ -1,0 +1,16 @@
+@namespace svg url("http://www.w3.org/2000/svg");
+
+body {
+  margin: 0;
+}
+
+.spl-splitter-container .spl-splitter {
+  background-color: #ccc;
+}
+.spl-splitter-container .spl-pane.controls-pane {
+  margin: 0.5em;
+}
+
+svg|g#pdfmcr-page-group {
+  user-select: none;
+}

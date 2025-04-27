@@ -3,6 +3,7 @@
 
 use std::collections::BTreeMap;
 use std::io::Write;
+use std::path::Path;
 
 use crate::model::File;
 use crate::pdf::{
@@ -11,7 +12,7 @@ use crate::pdf::{
 
 
 /// Converts a pdfmcr file to PDF.
-pub(crate) fn file_to_pdf(file: &File) -> Document {
+pub(crate) fn file_to_pdf(file: &File, image_base_path: &Path) -> Document {
     // we'll go for the following structure:
     // 1 = catalog
     // 2 = page tree root with all pages
@@ -109,9 +110,9 @@ pub(crate) fn file_to_pdf(file: &File) -> Document {
             Content::PageContents(content),
         );
 
-        let image_data = page.scanned_image.data.read()
-            .expect("failed to read image data")
-            .into_owned();
+        // convert the image path into an operating system path
+        let os_path = page.scanned_image.file_path.to_os_path(image_base_path);
+
         let image = ImageXObject {
             width: page.scanned_image.info.width.into(),
             height: page.scanned_image.info.height.into(),
@@ -119,7 +120,7 @@ pub(crate) fn file_to_pdf(file: &File) -> Document {
             bits_per_component: page.scanned_image.info.bit_depth,
             interpolate: true,
             data_filters: vec!["DCTDecode".to_owned()],
-            data: image_data,
+            os_path,
         };
         document.objects.insert(
             PdfId(page_pdf_id + 1),

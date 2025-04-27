@@ -1,14 +1,12 @@
 //! Structures representing data within pdfmcr.
 
 
-use std::borrow::Cow;
 use std::io::{self, Write};
-use std::path::PathBuf;
 
 use from_to_repr::FromToRepr;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde::ser::Error;
+use serde::{Deserialize, Serialize};
 
+use crate::image_path::ImagePath;
 use crate::pdf::write_pdf_string;
 
 
@@ -41,32 +39,13 @@ pub struct Page {
     pub artifacts: Vec<Artifact>,
 }
 impl Page {
-    pub fn to_info(&self) -> PageInfo {
-        PageInfo {
-            scanned_image: self.scanned_image.info,
-            annotations: self.annotations.clone(),
-            artifacts: self.artifacts.clone(),
+    pub fn new(scanned_image: JpegImage) -> Self {
+        Self {
+            scanned_image,
+            annotations: Vec::new(),
+            artifacts: Vec::new(),
         }
     }
-}
-
-
-/// Information about a single page with annotations.
-#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-pub struct PageInfo {
-    /// Information about the scanned image of the page, in JPEG format.
-    pub scanned_image: JpegImageInfo,
-
-    /// The annotations on the page, in reading order.
-    ///
-    /// Annotations represent the actual content.
-    pub annotations: Vec<Annotation>,
-
-    /// The artifacts on the page, in reading order.
-    ///
-    /// Artifacts represent elements that are printed on the page but which are not the actual page
-    /// content, e.g. page numbers.
-    pub artifacts: Vec<Artifact>,
 }
 
 
@@ -94,6 +73,15 @@ pub struct JpegImageInfo {
     /// The pixel density in the vertical direction (across the height).
     pub density_y: u16,
 }
+impl JpegImageInfo {
+    pub fn width_pt(&self) -> Option<u64> {
+        self.density_unit.try_to_points(self.width, self.density_x)
+    }
+
+    pub fn height_pt(&self) -> Option<u64> {
+        self.density_unit.try_to_points(self.height, self.density_y)
+    }
+}
 
 
 /// A JPEG image.
@@ -102,100 +90,10 @@ pub struct JpegImage {
     /// Information about the image.
     pub info: JpegImageInfo,
 
-    /// The actual full data of the image, in JFIF or Exif formats.
+    /// The path to the file containing the actual full data of the image, in JFIF or Exif formats.
     ///
     /// JFIF and Exif are the most common representations of JPEG files.
-    pub data: ImageData,
-}
-impl JpegImage {
-    pub fn write_object_body<W: Write>(&self, mut writer: W) -> Result<(), io::Error> {
-        let length = self.data.len()?;
-        let data = self.data.read()?;
-        writer.write_all(b"<</Type/XObject/Subtype/Image")?;
-        write!(writer, "/Width {}", self.info.width)?;
-        write!(writer, "/Height {}", self.info.height)?;
-        write!(writer, "/ColorSpace{}", self.info.color_space.as_pdf_name())?;
-        write!(writer, "/BitsPerComponent {}", self.info.color_space.as_pdf_name())?;
-        writer.write_all(b"/Filter[/DCTDecode]")?;
-        write!(writer, "/Length {}", length)?;
-        writer.write_all(b">>\nstream\n")?;
-        writer.write_all(&data)?;
-        writer.write_all(b">>\nendstream\n")?;
-        Ok(())
-    }
-}
-
-/// Binary data, inline or stored in the file system.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum ImageData {
-    /// Image data stored inline.
-    Inline { data: Vec<u8> },
-
-    /// Image data stored in a file in the file system.
-    External { path: PathBuf },
-}
-impl ImageData {
-    pub fn len(&self) -> Result<u64, io::Error> {
-        match self {
-            Self::Inline { data } => Ok(data.len().try_into().unwrap()),
-            Self::External { path } => path.metadata().map(|m| m.len()),
-        }
-    }
-
-    pub fn read(&self) -> Result<Cow<Vec<u8>>, io::Error> {
-        match self {
-            Self::Inline { data } => Ok(Cow::Borrowed(data)),
-            Self::External { path } => {
-                let data = std::fs::read(path)?;
-                Ok(Cow::Owned(data))
-            },
-        }
-    }
-
-    pub fn internalize(&mut self) -> Result<(), io::Error> {
-        match self {
-            Self::Inline { .. } => Ok(()),
-            Self::External { path } => {
-                let data = std::fs::read(&path)?;
-                *self = Self::Inline { data };
-                Ok(())
-            },
-        }
-    }
-
-    pub fn externalize<P: Into<PathBuf>>(&mut self, path: P) -> Result<(), io::Error> {
-        self.internalize()?;
-
-        match self {
-            Self::Inline { data } => {
-                let path_buf = path.into();
-                std::fs::write(&path_buf, data)?;
-                *self = Self::External { path: path_buf };
-                Ok(())
-            },
-            Self::External { .. } => unreachable!(),
-        }
-    }
-}
-impl<'de> Deserialize<'de> for ImageData {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let data: Vec<u8> = Deserialize::deserialize(deserializer)?;
-        Ok(Self::Inline { data })
-    }
-}
-impl Serialize for ImageData {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self {
-            Self::Inline { data } => {
-                data.serialize(serializer)
-            },
-            Self::External { path } => {
-                let data = std::fs::read(path)
-                    .map_err(|e| S::Error::custom(e))?;
-                data.serialize(serializer)
-            }
-        }
-    }
+    pub file_path: ImagePath,
 }
 
 /// The color space of an image or graphics system.
@@ -231,8 +129,8 @@ impl DensityUnit {
     pub fn try_to_points(&self, pixel_count: u16, density: u16) -> Option<u64> {
         match self {
             Self::NoUnit => None,
-            Self::DotsPerInch => Some(u64::from(pixel_count) / (72 * u64::from(density))),
-            Self::DotsPerCentimeter => Some(25 * u64::from(pixel_count) / (4572 * u64::from(density))),
+            Self::DotsPerInch => Some(u64::from(pixel_count) * 72 / u64::from(density)),
+            Self::DotsPerCentimeter => Some(3600 * u64::from(pixel_count) / (127 * u64::from(density))),
         }
     }
 }
@@ -303,6 +201,15 @@ impl ArtifactKind {
             Self::Layout => "/Layout",
             Self::Page => "/Page",
             Self::Background => "/Background",
+        }
+    }
+
+    pub const fn as_css_class(&self) -> &'static str {
+        match self {
+            Self::Pagination => "pagination",
+            Self::Layout => "layout",
+            Self::Page => "page",
+            Self::Background => "background",
         }
     }
 }
@@ -429,6 +336,15 @@ impl FontVariant {
             Self::Italic => 0b01,
             Self::Bold => 0b10,
             Self::BoldItalic => 0b11,
+        }
+    }
+
+    pub const fn as_appended_css_properties(&self) -> &'static str {
+        match self {
+            Self::Regular => "",
+            Self::Italic => ";font-style:italic",
+            Self::Bold => ";font-weight:bold",
+            Self::BoldItalic => ";font-weight:bold;font-style:italic",
         }
     }
 }
