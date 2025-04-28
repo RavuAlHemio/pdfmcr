@@ -227,7 +227,7 @@ pub struct TextChunk {
     pub font_size: u64,
 
     /// Character spacing.
-    pub character_spacing: u64,
+    pub character_spacing: i64,
 
     /// Word spacing.
     pub word_spacing: u64,
