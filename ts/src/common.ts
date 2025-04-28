@@ -26,6 +26,14 @@ export function positionFromTranslate(element: SVGGraphicsElement, svgLengthType
     // (m13 m23 m33 m43)
     // (m14 m24 m34 m44)
     //
+    // or, with single-letter aliases:
+    // (a c _ e)
+    // (b d _ f)
+    // (_ _ _ _)
+    // (_ _ _ _)
+    //
+    // some browsers steadfastly refuse to support the m## variables
+    //
     // a 2D translation is:
     // (1 0 0 tx)
     // (0 1 0 ty)
@@ -34,13 +42,31 @@ export function positionFromTranslate(element: SVGGraphicsElement, svgLengthType
 
     const sizer = svgRoot.createSVGLength();
 
-    sizer.newValueSpecifiedUnits(SVGLength.SVG_LENGTHTYPE_NUMBER, xform0.matrix.m41);
+    sizer.newValueSpecifiedUnits(SVGLength.SVG_LENGTHTYPE_NUMBER, xform0.matrix.e);
     sizer.convertToSpecifiedUnits(svgLengthType);
     const x = sizer.valueInSpecifiedUnits;
 
-    sizer.newValueSpecifiedUnits(SVGLength.SVG_LENGTHTYPE_NUMBER, xform0.matrix.m42);
+    sizer.newValueSpecifiedUnits(SVGLength.SVG_LENGTHTYPE_NUMBER, xform0.matrix.f);
     sizer.convertToSpecifiedUnits(svgLengthType);
     const y = sizer.valueInSpecifiedUnits;
 
     return { x, y };
+}
+
+export function getImageHeightPt(pageGroup: SVGGElement): number|null {
+    // find child image
+    let image: SVGImageElement|null = null;
+    for (let child of pageGroup.children) {
+        if (child.namespaceURI === SVG_NS && child.tagName === "image") {
+            image = <SVGImageElement>child;
+            break;
+        }
+    }
+    if (image === null) {
+        return null;
+    }
+
+    // convert its height into points and return
+    image.height.baseVal.convertToSpecifiedUnits(SVGLength.SVG_LENGTHTYPE_PT);
+    return image.height.baseVal.valueInSpecifiedUnits;
 }

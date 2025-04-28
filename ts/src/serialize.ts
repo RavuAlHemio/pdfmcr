@@ -1,41 +1,9 @@
-import { positionFromTranslate, SVG_NS } from "./common";
+import { getImageHeightPt, positionFromTranslate, SVG_NS } from "./common";
+import { Annotation, ArtifactKind, PageAnnotations, TextChunk } from "./model";
 
 
 // keep this in sync with src/model.rs, obviously
 export namespace Serialize {
-    export interface PageAnnotations {
-        annotations: Annotation[];
-        artifacts: Artifact[];
-    }
-
-    export type ArtifactKind = "Pagination"|"Page"|"Layout"|"Background";
-
-    export interface Artifact {
-        kind: ArtifactKind;
-        annotation: Annotation;
-    }
-
-    export interface Annotation {
-        left: number;
-        bottom: number;
-        elements: TextChunk[];
-    }
-
-    export type FontVariant = "Regular"|"Italic"|"Bold"|"BoldItalic";
-
-    export interface TextChunk {
-        text: string;
-        font_variant: FontVariant;
-        font_size: number;
-        character_spacing: number;
-        word_spacing: number;
-        leading: number;
-        language: string|null;
-        alternate_text: string|null;
-        actual_text: string|null;
-        expansion: string|null;
-    }
-
     function pointsValue(stringValue: string): number|null {
         if (stringValue.endsWith("pt")) {
             return +stringValue.substring(0, stringValue.length - 2);
@@ -112,10 +80,10 @@ export namespace Serialize {
             elements.push({
                 text,
                 font_variant: fontVariant,
-                font_size: fontSizePt,
-                character_spacing: characterSpacingPt,
-                word_spacing: wordSpacingPt,
-                leading: leadingPt,
+                font_size: Math.round(fontSizePt),
+                character_spacing: Math.round(characterSpacingPt),
+                word_spacing: Math.round(wordSpacingPt),
+                leading: Math.round(leadingPt),
                 language: null,
                 alternate_text: null,
                 actual_text: null,
@@ -124,8 +92,8 @@ export namespace Serialize {
         }
 
         return {
-            left: pos.x,
-            bottom: imageHeightPt - pos.y,
+            left: Math.round(pos.x),
+            bottom: Math.round(imageHeightPt - pos.y),
             elements,
         };
     }
@@ -136,44 +104,28 @@ export namespace Serialize {
             artifacts: [],
         };
 
-        let imageHeightPt: number|null = null;
+        const imageHeightPt = getImageHeightPt(pageGroup);
+
         for (let child of pageGroup.children) {
             if (child.namespaceURI !== SVG_NS) {
-                continue;
-            }
-
-            if (child.localName === "image") {
-                // this is our page background
-                const imageChild = <SVGImageElement>child;
-                const imageHeightPx = imageChild.width.baseVal.value;
-
-                const svgRoot = pageGroup.ownerSVGElement;
-                if (svgRoot === null) {
-                    continue;
-                }
-                const sizer = svgRoot.createSVGLength();
-                sizer.newValueSpecifiedUnits(SVGLength.SVG_LENGTHTYPE_PX, imageHeightPx);
-                sizer.convertToSpecifiedUnits(SVGLength.SVG_LENGTHTYPE_PT);
-                imageHeightPt = sizer.valueInSpecifiedUnits;
-
                 continue;
             }
 
             if (child.localName === "g") {
                 const gChild = <SVGGElement>child;
                 if (gChild.classList.contains("annotation")) {
-                    if (imageHeight === null) {
+                    if (imageHeightPt === null) {
                         continue;
                     }
 
                     // it's an annotation!
-                    const annotation = serializeAnnotation(gChild, imageHeight);
+                    const annotation = serializeAnnotation(gChild, imageHeightPt);
                     if (annotation === null) {
                         continue;
                     }
                     ret.annotations.push(annotation);
                 } else if (gChild.classList.contains("artifact")) {
-                    if (imageHeight === null) {
+                    if (imageHeightPt === null) {
                         continue;
                     }
 
@@ -189,7 +141,7 @@ export namespace Serialize {
                     } else {
                         continue;
                     }
-                    const annotation = serializeAnnotation(gChild, imageHeight);
+                    const annotation = serializeAnnotation(gChild, imageHeightPt);
                     if (annotation === null) {
                         continue;
                     }
@@ -231,16 +183,22 @@ export namespace Serialize {
                 },
             },
         );
+        let success = false;
         try {
             const response = await fetch(request);
             const responseText = response.text();
             if (response.status !== 200) {
                 alert("cannot save: " + responseText);
+            } else {
+                success = true;
             }
-        } catch (error) {
+        } catch (errorPromise) {
+            let error = await errorPromise;
             alert("cannot save: " + error);
         }
-        alert("saved!");
+        if (success) {
+            alert("saved!");
+        }
     }
 
     function doInit(): void {

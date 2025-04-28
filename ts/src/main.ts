@@ -15,7 +15,6 @@ window.PdfMcr = {
     Splitter: Splitter,
     SvgDrag: SvgDrag,
     init: function () {
-        window.PdfMcr.Annotations.init();
         window.PdfMcr.Serialize.init();
         window.PdfMcr.Splitter.init();
         window.PdfMcr.SvgDrag.init();
