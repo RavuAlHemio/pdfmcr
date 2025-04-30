@@ -52,11 +52,86 @@
         </form>
       </p>
       <p>
-        <input type="button" value="reset view" id="pdfmcr-reset-view" />
+        <input type="button" value="reset view" id="pdfmcr-reset-view-button" />
+        <input type="button" value="save" id="pdfmcr-save-button" />
       </p>
-      <p>
-        <input type="button" value="save" id="pdfmcr-save" />
-      </p>
+      <div id="pdfmcr-edit-label" style="display:none">
+        <p>
+          <label>
+            Text span:
+            <select id="pdfmcr-tspan-select"></select>
+          </label>
+        </p>
+        <p>
+          <input type="button" value="add" id="pdfmcr-add-tspan-button" />
+          <input type="button" value="remove" id="pdfmcr-remove-tspan-button" />
+        </p>
+        <p>
+          <label>
+            Text:<br/>
+            <textarea id="pdfmcr-textarea"></textarea>
+          </label>
+        </p>
+        <p>
+          <label>
+            <input type="checkbox" name="font-bold" value="1" id="pdfmcr-font-bold-checkbox" />
+            bold
+          </label>
+          <label>
+            <input type="checkbox" name="font-italic" value="1" id="pdfmcr-font-italic-checkbox" />
+            italic
+          </label>
+        </p>
+        <p>
+          <label>
+            Font size:
+            <input type="number" min="1" max="600" step="1" name="font-size" id="pdfmcr-font-size" />
+          </label>
+          <label>
+            Character spacing:
+            <input type="number" min="-600" max="600" step="1" name="char-spacing" id="pdfmcr-char-spacing" />
+          </label>
+          <label>
+            Word spacing:
+            <input type="number" min="-600" max="600" step="1" name="word-spacing" id="pdfmcr-word-spacing" />
+          </label>
+          <label>
+            Leading:
+            <input type="number" min="-600" max="600" step="1" name="leading" id="pdfmcr-leading" />
+          </label>
+        </p>
+        <p>
+          <input type="checkbox" name="lang-enabled" value="1" id="pdfmcr-lang-enabled" />
+          <label>
+            Language:
+            <input type="text" name="lang" id="pdfmcr-lang" />
+          </label>
+        </p>
+        <p>
+          <input type="checkbox" name="alt-text-enabled" value="1" id="pdfmcr-alt-text-enabled" />
+          <label>
+            Alternate text:<br/>
+            <textarea name="alt-text" id="pdfmcr-alt-text"></textarea>
+          </label>
+        </p>
+        <p>
+          <input type="checkbox" name="actual-text-enabled" value="1" id="pdfmcr-actual-text-enabled" />
+          <label>
+            Actual text:<br/>
+            <textarea name="actual-text" id="pdfmcr-actual-text"></textarea>
+          </label>
+        </p>
+        <p>
+          <input type="checkbox" name="expansion-enabled" value="1" id="pdfmcr-expansion-enabled" />
+          <label>
+            Expansion:<br/>
+            <textarea name="expansion" id="pdfmcr-expansion"></textarea>
+          </label>
+        </p>
+        <p>
+          <input type="button" value="update" id="pdfmcr-update-tspan-button" />
+        </p>
+      </div>
     </div>
   </div>
 </div>

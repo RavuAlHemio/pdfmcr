@@ -1,9 +1,11 @@
 import { getImageHeightPt, Position, positionFromTranslate, SVG_NS } from "./common";
-import { Annotation, ArtifactKind, PageAnnotations, TextChunk } from "./model";
+import { Annotation, PageAnnotations, TextChunk } from "./model";
+import { TextManagement } from "./textmgmt";
 
 export namespace Annotations {
     let dragStart: Position|null = null;
     let dragEvents: ["mousemove"|"mouseup", any][] = [];
+    let selectedRect: SVGRectElement|null = null;
 
     function setGroupPos(annotationGroup: SVGGElement, clientX: number, clientY: number): SVGSVGElement|null {
         if (dragStart === null) {
@@ -50,7 +52,7 @@ export namespace Annotations {
         dragStart = null;
     }
 
-    function rectGrabbed(annotationGroup: SVGGElement, event: MouseEvent): void {
+    function rectGrabbed(rect: SVGRectElement, annotationGroup: SVGGElement, event: MouseEvent): void {
         if (event.button !== 0) {
             // not the left mouse button; ignore
             return;
@@ -58,6 +60,21 @@ export namespace Annotations {
 
         // do not pass through to group
         event.stopPropagation();
+
+        // color the previous rect white again
+        if (selectedRect !== null) {
+            selectedRect.style.fill = "#fff";
+        }
+        selectedRect = rect;
+
+        // color our rect red
+        rect.style.fill = "#f00";
+
+        // tell the editor form that things have changed
+        const annotationTexts = annotationGroup.getElementsByTagNameNS(SVG_NS, "text");
+        if (annotationTexts.length > 0) {
+            TextManagement.textSelected(<SVGTextElement>annotationTexts[0]);
+        }
 
         const svgRoot = annotationGroup.ownerSVGElement;
         if (svgRoot === null) {
@@ -85,25 +102,58 @@ export namespace Annotations {
         svgRoot.addEventListener("mouseup", releaseEvent);
     }
 
+    export function createDefaultTextChunk(initialText: string): TextChunk {
+        return {
+            text: initialText,
+            font_variant: "Regular",
+            font_size: 12,
+            character_spacing: 0,
+            word_spacing: 0,
+            leading: 0,
+            language: null,
+            alternate_text: null,
+            actual_text: null,
+            expansion: null,
+        };
+    }
+
     function createDefaultAnnotation(initialText: string): Annotation {
         return {
             left: 0,
             bottom: 0,
             elements: [
-                {
-                    text: initialText,
-                    font_variant: "Regular",
-                    font_size: 12,
-                    character_spacing: 0,
-                    word_spacing: 0,
-                    leading: 0,
-                    language: null,
-                    alternate_text: null,
-                    actual_text: null,
-                    expansion: null,
-                }
+                createDefaultTextChunk(initialText),
             ],
         };
+    }
+
+    export function makeTSpanFromTextChunk(annoTextElem: SVGTextElement, textChunk: TextChunk): SVGTSpanElement {
+        const lineHeightPt = textChunk.font_size + textChunk.leading;
+
+        const annoTSpanElem = document.createElementNS(SVG_NS, "tspan");
+        annoTSpanElem.style.fontSize = `${textChunk.font_size}pt`;
+        annoTSpanElem.style.letterSpacing = `${textChunk.character_spacing}pt`;
+        annoTSpanElem.style.wordSpacing = `${textChunk.word_spacing}pt`;
+        annoTSpanElem.style.lineHeight = `${lineHeightPt}pt`;
+        annoTextElem.appendChild(annoTSpanElem);
+
+        if (textChunk.language !== null) {
+            annoTSpanElem.setAttribute("data-language", textChunk.language);
+        }
+        if (textChunk.alternate_text !== null) {
+            annoTSpanElem.setAttribute("data-alternate-text", textChunk.alternate_text);
+        }
+        if (textChunk.actual_text !== null) {
+            annoTSpanElem.setAttribute("data-actual-text", textChunk.actual_text);
+        }
+        if (textChunk.expansion !== null) {
+            annoTSpanElem.setAttribute("data-expansion", textChunk.expansion);
+        }
+
+        const annoTextNode = document.createTextNode(textChunk.text);
+        annoTSpanElem.appendChild(annoTextNode);
+
+        return annoTSpanElem;
     }
 
     function makeGroupFromAnnotation(pageGroup: SVGGElement, pageHeightPt: number, annotation: Annotation): SVGGElement|null {
@@ -129,6 +179,14 @@ export namespace Annotations {
         transform.setTranslate(xPx, yPx);
         annoGroup.transform.baseVal.initialize(transform);
 
+        const annoTextElem = document.createElementNS(SVG_NS, "text");
+        annoTextElem.style.fill = "#000";
+        annoGroup.appendChild(annoTextElem);
+
+        for (let element of annotation.elements) {
+            makeTSpanFromTextChunk(annoTextElem, element);
+        }
+
         const grabRect = document.createElementNS(SVG_NS, "rect");
         grabRect.x.baseVal.newValueSpecifiedUnits(SVGLength.SVG_LENGTHTYPE_PT, 0);
         grabRect.y.baseVal.newValueSpecifiedUnits(SVGLength.SVG_LENGTHTYPE_PT, 0);
@@ -136,39 +194,8 @@ export namespace Annotations {
         grabRect.height.baseVal.newValueSpecifiedUnits(SVGLength.SVG_LENGTHTYPE_PT, 10);
         grabRect.style.fill = "#fff";
         grabRect.style.fillOpacity = "0.5";
-        grabRect.addEventListener("mousedown", event => rectGrabbed(annoGroup, event));
+        grabRect.addEventListener("mousedown", event => rectGrabbed(grabRect, annoGroup, event));
         annoGroup.appendChild(grabRect);
-
-        const annoTextElem = document.createElementNS(SVG_NS, "text");
-        annoTextElem.style.fill = "#000";
-        annoGroup.appendChild(annoTextElem);
-
-        for (let element of annotation.elements) {
-            const lineHeightPt = element.font_size + element.leading;
-
-            const annoTSpanElem = document.createElementNS(SVG_NS, "tspan");
-            annoTSpanElem.style.fontSize = `${element.font_size}pt`;
-            annoTSpanElem.style.letterSpacing = `${element.character_spacing}pt`;
-            annoTSpanElem.style.wordSpacing = `${element.word_spacing}pt`;
-            annoTSpanElem.style.lineHeight = `${lineHeightPt}pt`;
-            annoTextElem.appendChild(annoTSpanElem);
-
-            if (element.language !== null) {
-                annoTSpanElem.setAttribute("data-language", element.language);
-            }
-            if (element.alternate_text !== null) {
-                annoTSpanElem.setAttribute("data-alternate-text", element.alternate_text);
-            }
-            if (element.actual_text !== null) {
-                annoTSpanElem.setAttribute("data-actual-text", element.actual_text);
-            }
-            if (element.expansion !== null) {
-                annoTSpanElem.setAttribute("data-expansion", element.expansion);
-            }
-
-            const annoTextNode = document.createTextNode(element.text);
-            annoTSpanElem.appendChild(annoTextNode);
-        }
 
         pageGroup.appendChild(annoGroup);
 

@@ -1,17 +1,9 @@
-import { getImageHeightPt, positionFromTranslate, SVG_NS } from "./common";
+import { getImageHeightPt, pointsValue, positionFromTranslate, SVG_NS } from "./common";
 import { Annotation, ArtifactKind, PageAnnotations, TextChunk } from "./model";
 
 
 // keep this in sync with src/model.rs, obviously
 export namespace Serialize {
-    function pointsValue(stringValue: string): number|null {
-        if (stringValue.endsWith("pt")) {
-            return +stringValue.substring(0, stringValue.length - 2);
-        } else {
-            return null;
-        }
-    }
-
     function serializeAnnotation(annotationGroup: SVGGElement, imageHeightPt: number): Annotation|null {
         const svgRoot = annotationGroup.ownerSVGElement;
         if (svgRoot === null) {
@@ -77,6 +69,11 @@ export namespace Serialize {
                 ? (isItalic ? "BoldItalic" : "Bold")
                 : (isItalic ? "Italic" : "Regular");
 
+            const language = tspan.getAttribute("data-lang");
+            const alternate_text = tspan.getAttribute("data-alt-text");
+            const actual_text = tspan.getAttribute("data-actual-text");
+            const expansion = tspan.getAttribute("data-expansion");
+
             elements.push({
                 text,
                 font_variant: fontVariant,
@@ -84,10 +81,10 @@ export namespace Serialize {
                 character_spacing: Math.round(characterSpacingPt),
                 word_spacing: Math.round(wordSpacingPt),
                 leading: Math.round(leadingPt),
-                language: null,
-                alternate_text: null,
-                actual_text: null,
-                expansion: null
+                language,
+                alternate_text,
+                actual_text,
+                expansion,
             });
         }
 
@@ -202,7 +199,7 @@ export namespace Serialize {
     }
 
     function doInit(): void {
-        const saveButton = <HTMLInputElement|null>document.getElementById("pdfmcr-save");
+        const saveButton = <HTMLInputElement|null>document.getElementById("pdfmcr-save-button");
         if (saveButton === null) {
             return;
         }

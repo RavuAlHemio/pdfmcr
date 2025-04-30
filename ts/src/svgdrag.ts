@@ -100,7 +100,7 @@ export namespace SvgDrag {
         }
         groupElem.addEventListener("mousedown", startEvent => groupDragStarted(groupElem, startEvent));
 
-        const resetViewButton = <HTMLInputElement|null>document.getElementById("pdfmcr-reset-view");
+        const resetViewButton = <HTMLInputElement|null>document.getElementById("pdfmcr-reset-view-button");
         if (resetViewButton !== null) {
             resetViewButton.addEventListener("click", () => resetView(groupElem));
         }

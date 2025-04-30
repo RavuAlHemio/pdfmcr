@@ -230,7 +230,7 @@ pub struct TextChunk {
     pub character_spacing: i64,
 
     /// Word spacing.
-    pub word_spacing: u64,
+    pub word_spacing: i64,
 
     /// Leading (additional line spacing).
     ///

@@ -70,3 +70,23 @@ export function getImageHeightPt(pageGroup: SVGGElement): number|null {
     image.height.baseVal.convertToSpecifiedUnits(SVGLength.SVG_LENGTHTYPE_PT);
     return image.height.baseVal.valueInSpecifiedUnits;
 }
+
+export function childElementsNamedNS(parent: Element, namespace: string|null, localName: string): Element[] {
+    const childElements = parent.children;
+    const namedElements: Element[] = [];
+    for (let i = 0; i < childElements.length; i++) {
+        const childElement = childElements[i];
+        if (childElement.namespaceURI === namespace && childElement.localName === localName) {
+            namedElements.push(childElement);
+        }
+    }
+    return namedElements;
+}
+
+export function pointsValue(stringValue: string): number|null {
+    if (stringValue.endsWith("pt")) {
+        return +stringValue.substring(0, stringValue.length - 2);
+    } else {
+        return null;
+    }
+}
