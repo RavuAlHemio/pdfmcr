@@ -3,6 +3,7 @@ import { Position } from "./common";
 
 export namespace SvgDrag {
     let dragStart: Position|null = null;
+    let currentImageScale: number = 1.0;
     let currentImageOffset: Position = { x: 0, y: 0 };
     const dragEvents: [string, any][] = [];
 
@@ -12,9 +13,12 @@ export namespace SvgDrag {
             // can't do much
             return;
         }
-        const transform = svgRoot.createSVGTransform();
-        transform.setTranslate(currentImageOffset.x, currentImageOffset.y);
-        groupElem.transform.baseVal.initialize(transform);
+        const scaling = svgRoot.createSVGTransform();
+        scaling.setScale(currentImageScale, currentImageScale);
+        const translation = svgRoot.createSVGTransform();
+        translation.setTranslate(currentImageOffset.x, currentImageOffset.y);
+        groupElem.transform.baseVal.initialize(scaling);
+        groupElem.transform.baseVal.appendItem(translation);
     }
 
     function resetView(groupElem: SVGGElement): void {
@@ -22,6 +26,12 @@ export namespace SvgDrag {
             x: 0,
             y: 0,
         };
+        currentImageScale = 1.0;
+        updateGroupTransform(groupElem);
+    }
+
+    function performZoom(groupElem: SVGGElement, factor: number): void {
+        currentImageScale *= factor;
         updateGroupTransform(groupElem);
     }
 
@@ -32,8 +42,8 @@ export namespace SvgDrag {
         }
 
         currentImageOffset = {
-            x: overEvent.clientX - dragStart.x,
-            y: overEvent.clientY - dragStart.y,
+            x: (overEvent.clientX - dragStart.x) / currentImageScale,
+            y: (overEvent.clientY - dragStart.y) / currentImageScale,
         };
 
         // move the group there
@@ -57,8 +67,8 @@ export namespace SvgDrag {
 
         // store new position as final coordinates
         currentImageOffset = {
-            x: endEvent.clientX - dragStart.x,
-            y: endEvent.clientY - dragStart.y,
+            x: (endEvent.clientX - dragStart.x) / currentImageScale,
+            y: (endEvent.clientY - dragStart.y) / currentImageScale,
         };
 
         // forget start coordinates
@@ -69,6 +79,9 @@ export namespace SvgDrag {
         for (let oldDragEvent of oldDragEvents) {
             svgRoot.removeEventListener(oldDragEvent[0], oldDragEvent[1]);
         }
+
+        // update one last time
+        updateGroupTransform(groupElem);
     }
 
     function registerDragEvent<K extends keyof SVGElementEventMap>(element: SVGElement, eventName: K, handler: (this: SVGElement, ev: SVGElementEventMap[K]) => any) {
@@ -86,8 +99,8 @@ export namespace SvgDrag {
         }
 
         dragStart = {
-            x: startEvent.offsetX - currentImageOffset.x,
-            y: startEvent.offsetY - currentImageOffset.y,
+            x: startEvent.offsetX - (currentImageOffset.x * currentImageScale),
+            y: startEvent.offsetY - (currentImageOffset.y * currentImageScale),
         };
         registerDragEvent(svgRoot, "mousemove", overEvent => groupDragOver(groupElem, overEvent));
         registerDragEvent(svgRoot, "mouseup", endEvent => groupDragEnd(groupElem, endEvent));
@@ -99,6 +112,15 @@ export namespace SvgDrag {
             return;
         }
         groupElem.addEventListener("mousedown", startEvent => groupDragStarted(groupElem, startEvent));
+
+        const zoomInButton = <HTMLInputElement|null>document.getElementById("pdfmcr-zoom-in-button");
+        if (zoomInButton !== null) {
+            zoomInButton.addEventListener("click", () => performZoom(groupElem, 3.0/2.0));
+        }
+        const zoomOutButton = <HTMLInputElement|null>document.getElementById("pdfmcr-zoom-out-button");
+        if (zoomOutButton !== null) {
+            zoomOutButton.addEventListener("click", () => performZoom(groupElem, 2.0/3.0));
+        }
 
         const resetViewButton = <HTMLInputElement|null>document.getElementById("pdfmcr-reset-view-button");
         if (resetViewButton !== null) {
