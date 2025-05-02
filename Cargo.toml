@@ -1,5 +1,6 @@
 [workspace]
 members = [
     "pdfmcr",
+    "pdfpages",
 ]
 resolver = "2"
