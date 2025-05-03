@@ -21,6 +21,17 @@ export namespace Serialize {
         }
         const textChild = textChildren[0];
 
+        const fontSizePt = pointsValue(textChild.style.fontSize);
+        const lineHeightPt = pointsValue(textChild.style.lineHeight);
+
+        if (fontSizePt === null) {
+            return null;
+        }
+        if (lineHeightPt === null) {
+            return null;
+        }
+        const leadingPt = lineHeightPt - fontSizePt;
+
         const elements: TextChunk[] = [];
         for (let rawChild of textChild.children) {
             if (rawChild.namespaceURI !== SVG_NS) {
@@ -31,27 +42,17 @@ export namespace Serialize {
             }
             const tspan = <SVGTSpanElement>rawChild;
 
-            const fontSizePt = pointsValue(tspan.style.fontSize);
             const characterSpacingPt = pointsValue(tspan.style.letterSpacing);
             const wordSpacingPt = pointsValue(tspan.style.wordSpacing);
-            const lineHeightPt = pointsValue(tspan.style.lineHeight);
             const isBold = tspan.style.fontWeight === "bold";
             const isItalic = tspan.style.fontStyle === "italic";
 
-            if (fontSizePt === null) {
-                continue;
-            }
             if (characterSpacingPt === null) {
                 continue;
             }
             if (wordSpacingPt === null) {
                 continue;
             }
-            if (lineHeightPt === null) {
-                continue;
-            }
-
-            const leadingPt = lineHeightPt - fontSizePt;
 
             const children = tspan.childNodes;
             if (children.length !== 1) {
@@ -77,10 +78,8 @@ export namespace Serialize {
             elements.push({
                 text,
                 font_variant: fontVariant,
-                font_size: Math.round(fontSizePt),
-                character_spacing: Math.round(characterSpacingPt),
-                word_spacing: Math.round(wordSpacingPt),
-                leading: Math.round(leadingPt),
+                character_spacing: characterSpacingPt,
+                word_spacing: wordSpacingPt,
                 language,
                 alternate_text,
                 actual_text,
@@ -91,6 +90,8 @@ export namespace Serialize {
         return {
             left: Math.round(pos.x),
             bottom: Math.round(imageHeightPt - pos.y),
+            font_size: fontSizePt,
+            leading: leadingPt,
             elements,
         };
     }

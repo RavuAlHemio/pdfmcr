@@ -7,8 +7,13 @@ body {
 .spl-splitter-container .spl-splitter {
   background-color: #ccc;
 }
+.spl-splitter-container .spl-pane {
+  overflow-x: hidden;
+  overflow-y: hidden;
+}
 .spl-splitter-container .spl-pane.controls-pane {
   margin: 0.5em;
+  overflow-y: scroll;
 }
 
 svg|g#pdfmcr-page-group {

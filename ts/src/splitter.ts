@@ -88,7 +88,6 @@ export namespace Splitter {
             pane.style.flexGrow = "1";
             pane.style.flexShrink = "1";
             pane.style.flexBasis = "auto";
-            pane.style.overflow = "hidden";
         }
         const splitters = <HTMLCollectionOf<HTMLElement>>container.getElementsByClassName("spl-splitter");
         for (const splitter of splitters) {

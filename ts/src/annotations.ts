@@ -1,5 +1,6 @@
 import { getImageHeightPt, Position, positionFromTranslate, SVG_NS } from "./common";
 import { Annotation, PageAnnotations, TextChunk } from "./model";
+import { SvgDrag } from './svgdrag';
 import { TextManagement } from "./textmgmt";
 
 export namespace Annotations {
@@ -19,8 +20,8 @@ export namespace Annotations {
 
         const transform = svgRoot.createSVGTransform();
         transform.setTranslate(
-            dragStart.x + clientX,
-            dragStart.y + clientY,
+            (clientX - dragStart.x) / SvgDrag.currentImageScale,
+            (clientY - dragStart.y) / SvgDrag.currentImageScale,
         );
         annotationGroup.transform.baseVal.initialize(transform);
 
@@ -88,8 +89,8 @@ export namespace Annotations {
         }
 
         dragStart = {
-            x: curPos.x - event.clientX,
-            y: curPos.y - event.clientY,
+            x: event.offsetX - (curPos.x * SvgDrag.currentImageScale),
+            y: event.offsetY - (curPos.y * SvgDrag.currentImageScale),
         };
 
         // set up more events
@@ -106,10 +107,8 @@ export namespace Annotations {
         return {
             text: initialText,
             font_variant: "Regular",
-            font_size: 12,
             character_spacing: 0,
             word_spacing: 0,
-            leading: 0,
             language: null,
             alternate_text: null,
             actual_text: null,
@@ -121,6 +120,8 @@ export namespace Annotations {
         return {
             left: 0,
             bottom: 0,
+            font_size: 12,
+            leading: 0,
             elements: [
                 createDefaultTextChunk(initialText),
             ],
@@ -128,13 +129,10 @@ export namespace Annotations {
     }
 
     export function makeTSpanFromTextChunk(annoTextElem: SVGTextElement, textChunk: TextChunk): SVGTSpanElement {
-        const lineHeightPt = textChunk.font_size + textChunk.leading;
-
         const annoTSpanElem = document.createElementNS(SVG_NS, "tspan");
-        annoTSpanElem.style.fontSize = `${textChunk.font_size}pt`;
         annoTSpanElem.style.letterSpacing = `${textChunk.character_spacing}pt`;
         annoTSpanElem.style.wordSpacing = `${textChunk.word_spacing}pt`;
-        annoTSpanElem.style.lineHeight = `${lineHeightPt}pt`;
+        annoTSpanElem.style.whiteSpace = "pre";
         annoTextElem.appendChild(annoTSpanElem);
 
         if (textChunk.language !== null) {
@@ -179,8 +177,12 @@ export namespace Annotations {
         transform.setTranslate(xPx, yPx);
         annoGroup.transform.baseVal.initialize(transform);
 
+        const lineHeight = annotation.font_size + annotation.leading;
+
         const annoTextElem = document.createElementNS(SVG_NS, "text");
         annoTextElem.style.fill = "#000";
+        annoTextElem.style.fontSize = `${annotation.font_size}pt`;
+        annoTextElem.style.lineHeight = `${lineHeight}pt`;
         annoGroup.appendChild(annoTextElem);
 
         for (let element of annotation.elements) {

@@ -1,7 +1,7 @@
 {% extends "_base.html" %}
 
 {% block addhead %}
-<meta name="pdfmcr-page-number" value="{{ page_number }}" />
+<meta name="pdfmcr-page-number" content="{{ page_number }}" />
 <script type="text/javascript">
   PdfMcr.Annotations.init({
     "annotations": {{ page.annotations|json|safe }},
@@ -60,6 +60,16 @@
       <div id="pdfmcr-edit-label" style="display:none">
         <p>
           <label>
+            Font size:
+            <input type="number" min="1" max="600" step="0.1" name="font-size" id="pdfmcr-font-size" />
+          </label>
+          <label>
+            Leading:
+            <input type="number" min="-600" max="600" step="0.1" name="leading" id="pdfmcr-leading" />
+          </label>
+        </p>
+        <p>
+          <label>
             Text span:
             <select id="pdfmcr-tspan-select"></select>
           </label>
@@ -86,20 +96,12 @@
         </p>
         <p>
           <label>
-            Font size:
-            <input type="number" min="1" max="600" step="1" name="font-size" id="pdfmcr-font-size" />
-          </label>
-          <label>
             Character spacing:
-            <input type="number" min="-600" max="600" step="1" name="char-spacing" id="pdfmcr-char-spacing" />
+            <input type="number" min="-600" max="600" step="0.1" name="char-spacing" id="pdfmcr-char-spacing" />
           </label>
           <label>
             Word spacing:
-            <input type="number" min="-600" max="600" step="1" name="word-spacing" id="pdfmcr-word-spacing" />
-          </label>
-          <label>
-            Leading:
-            <input type="number" min="-600" max="600" step="1" name="leading" id="pdfmcr-leading" />
+            <input type="number" min="-600" max="600" step="0.1" name="word-spacing" id="pdfmcr-word-spacing" />
           </label>
         </p>
         <p>

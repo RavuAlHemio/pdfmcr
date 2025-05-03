@@ -1,20 +1,21 @@
-import { childElementsNamedNS, pointsValue, SVG_NS } from './common';
 import { Annotations } from './annotations';
+import { childElementsNamedNS, pointsValue, SVG_NS } from './common';
 
 
 export namespace TextManagement {
     interface TextForm {
         editLabelSection: HTMLDivElement,
 
+        fontSizeInput: HTMLInputElement,
+        leadingInput: HTMLInputElement,
+
         textSpanSelect: HTMLSelectElement,
 
         textArea: HTMLTextAreaElement,
         fontBoldCheckbox: HTMLInputElement,
         fontItalicCheckbox: HTMLInputElement,
-        fontSizeInput: HTMLInputElement,
         charSpacingInput: HTMLInputElement,
         wordSpacingInput: HTMLInputElement,
-        leadingInput: HTMLInputElement,
 
         languageEnabledCheckbox: HTMLInputElement,
         languageInput: HTMLInputElement,
@@ -44,7 +45,7 @@ export namespace TextManagement {
         const tspans = childElementsNamedNS(selectedText, SVG_NS, "tspan");
         for (let tspan of tspans) {
             const option = document.createElement("option");
-            option.textContent = tspan.textContent;
+            option.textContent = shortenString(tspan.textContent ?? "");
             textForm.textSpanSelect.appendChild(option);
         }
         textForm.textSpanSelect.selectedIndex = 0;
@@ -84,23 +85,25 @@ export namespace TextManagement {
             selectedTextSpan = textSpans[textSpanIndex];
         }
 
+        // update global form values
+        let leading = 0;
+        const lineHeight = pointsValue(selectedText.style.lineHeight);
+        const fontSize = pointsValue(selectedText.style.fontSize) ?? 12;
+        if (lineHeight !== null) {
+            leading = lineHeight - fontSize;
+        }
+        textForm.leadingInput.value = "" + leading;
+        textForm.fontSizeInput.value = "" + (pointsValue(selectedText.style.fontSize) ?? 12);
+
         if (selectedTextSpan === null) {
             return;
         }
 
-        // update the form
-
-        let leading = 0;
-        const lineHeight = pointsValue(selectedTextSpan.style.lineHeight);
-        const fontSize = pointsValue(selectedTextSpan.style.fontSize) ?? 12;
-        if (lineHeight !== null) {
-            leading = lineHeight - fontSize;
-        }
+        // update span-specific form values
 
         textForm.textArea.value = selectedTextSpan.textContent ?? "";
         textForm.fontBoldCheckbox.checked = selectedTextSpan.style.fontWeight === "bold";
         textForm.fontItalicCheckbox.checked = selectedTextSpan.style.fontStyle === "italic";
-        textForm.fontSizeInput.value = "" + (pointsValue(selectedTextSpan.style.fontSize) ?? 12);
         textForm.charSpacingInput.value = "" + (pointsValue(selectedTextSpan.style.letterSpacing) ?? 0);
         textForm.wordSpacingInput.value = "" + (pointsValue(selectedTextSpan.style.wordSpacing) ?? 0);
         textForm.leadingInput.value = "" + leading;
@@ -114,6 +117,12 @@ export namespace TextManagement {
         textForm.expansionTextInput.value = selectedTextSpan.getAttribute("data-expansion") ?? "";
     }
 
+    function shortenString(input: string): string {
+        return (input.length > 80)
+            ? input.substring(0, 80) + "\u2026"
+            : input;
+    }
+
     function addTextSpan(): void {
         if (textForm === null) {
             return;
@@ -122,12 +131,22 @@ export namespace TextManagement {
             return;
         }
 
-        const newTextChunk = Annotations.createDefaultTextChunk("lorem ipsum");
-        Annotations.makeTSpanFromTextChunk(selectedText, newTextChunk);
+        let newTSpan: SVGTSpanElement;
+        if (selectedTextSpan !== null) {
+            // copy the current span
+            newTSpan = <SVGTSpanElement>document.createElementNS(selectedTextSpan.namespaceURI, selectedTextSpan.localName);
+            for (let attribute of selectedTextSpan.attributes) {
+                newTSpan.setAttributeNS(attribute.namespaceURI, attribute.name, attribute.value);
+            }
+            selectedText.appendChild(newTSpan);
+        } else {
+            const newTextChunk = Annotations.createDefaultTextChunk("lorem ipsum");
+            newTSpan = Annotations.makeTSpanFromTextChunk(selectedText, newTextChunk);
+        }
 
         // also add an option to the selection box and select it
         const option = document.createElement("option");
-        option.text = newTextChunk.text;
+        option.text = shortenString(newTSpan.textContent ?? "");
         textForm.textSpanSelect.appendChild(option);
         textForm.textSpanSelect.selectedIndex = textForm.textSpanSelect.options.length - 1;
     }
@@ -159,19 +178,22 @@ export namespace TextManagement {
         if (textForm === null) {
             return;
         }
+        if (selectedText === null) {
+            return;
+        }
         if (selectedTextSpan === null) {
             return;
         }
 
         const lineHeight = (+textForm.leadingInput.value) + (+textForm.fontSizeInput.value);
+        selectedText.style.fontSize = `${textForm.fontSizeInput.value}pt`;
+        selectedText.style.lineHeight = `${lineHeight}pt`;
 
         selectedTextSpan.textContent = textForm.textArea.value;
         selectedTextSpan.style.fontWeight = textForm.fontBoldCheckbox.checked ? "bold" : "";
         selectedTextSpan.style.fontStyle = textForm.fontItalicCheckbox.checked ? "italic" : "";
-        selectedTextSpan.style.fontSize = `${textForm.fontSizeInput.value}pt`;
         selectedTextSpan.style.letterSpacing = `${textForm.charSpacingInput.value}pt`;
         selectedTextSpan.style.wordSpacing = `${textForm.wordSpacingInput.value}pt`;
-        selectedTextSpan.style.lineHeight = `${lineHeight}pt`;
 
         const CHECKBOXES_INPUTS_AND_ATTRIBUTES: [HTMLInputElement, HTMLInputElement|HTMLTextAreaElement, string][] = [
             [textForm.languageEnabledCheckbox, textForm.languageInput, "data-lang"],
@@ -189,22 +211,23 @@ export namespace TextManagement {
 
         // update name of option too
         if (textForm.textSpanSelect.selectedIndex !== -1) {
-            textForm.textSpanSelect.options[textForm.textSpanSelect.selectedIndex].textContent = selectedTextSpan.textContent;
+            textForm.textSpanSelect.options[textForm.textSpanSelect.selectedIndex].text = shortenString(selectedTextSpan.textContent);
         }
     }
 
     function doInit(): void {
         const editLabelSection = <HTMLDivElement|null>document.getElementById("pdfmcr-edit-label");
 
+        const fontSizeInput = <HTMLInputElement|null>document.getElementById("pdfmcr-font-size");
+        const leadingInput = <HTMLInputElement|null>document.getElementById("pdfmcr-leading");
+
         const textSpanSelect = <HTMLSelectElement|null>document.getElementById("pdfmcr-tspan-select");
 
         const textArea = <HTMLTextAreaElement|null>document.getElementById("pdfmcr-textarea");
         const fontBoldCheckbox = <HTMLInputElement|null>document.getElementById("pdfmcr-font-bold-checkbox");
         const fontItalicCheckbox = <HTMLInputElement|null>document.getElementById("pdfmcr-font-italic-checkbox");
-        const fontSizeInput = <HTMLInputElement|null>document.getElementById("pdfmcr-font-size");
         const charSpacingInput = <HTMLInputElement|null>document.getElementById("pdfmcr-char-spacing");
         const wordSpacingInput = <HTMLInputElement|null>document.getElementById("pdfmcr-word-spacing");
-        const leadingInput = <HTMLInputElement|null>document.getElementById("pdfmcr-leading");
 
         const languageEnabledCheckbox = <HTMLInputElement|null>document.getElementById("pdfmcr-lang-enabled");
         const languageInput = <HTMLInputElement|null>document.getElementById("pdfmcr-lang");
@@ -216,14 +239,14 @@ export namespace TextManagement {
         const expansionTextInput = <HTMLTextAreaElement|null>document.getElementById("pdfmcr-expansion");
 
         if (editLabelSection === null) { return; }
+        if (fontSizeInput === null) { return; }
+        if (leadingInput === null) { return; }
         if (textSpanSelect === null) { return; }
         if (textArea === null) { return; }
         if (fontBoldCheckbox === null) { return; }
         if (fontItalicCheckbox === null) { return; }
-        if (fontSizeInput === null) { return; }
         if (charSpacingInput === null) { return; }
         if (wordSpacingInput === null) { return; }
-        if (leadingInput === null) { return; }
         if (languageEnabledCheckbox === null) { return; }
         if (languageInput === null) { return; }
         if (altTextEnabledCheckbox === null) { return; }
@@ -243,14 +266,14 @@ export namespace TextManagement {
 
         textForm = {
             editLabelSection,
+            fontSizeInput,
+            leadingInput,
             textSpanSelect,
             textArea,
             fontBoldCheckbox,
             fontItalicCheckbox,
-            fontSizeInput,
             charSpacingInput,
             wordSpacingInput,
-            leadingInput,
             languageEnabledCheckbox,
             languageInput,
             altTextEnabledCheckbox,

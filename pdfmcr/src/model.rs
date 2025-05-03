@@ -5,6 +5,7 @@ use std::io::{self, Write};
 
 use from_to_repr::FromToRepr;
 use serde::{Deserialize, Serialize};
+use strict_num::{FiniteF64, NonZeroPositiveF64};
 
 use crate::image_path::ImagePath;
 use crate::pdf::write_pdf_string;
@@ -145,6 +146,15 @@ pub struct Annotation {
     /// The vertical coordinate of the annotation, from the bottom edge of the page.
     pub bottom: u64,
 
+    /// The size of the font, in points (72ths of an inch).
+    pub font_size: NonZeroPositiveF64,
+
+    /// Leading (additional line spacing).
+    ///
+    /// Pronunciation tip: "leading" is derived from the chemical element lead (Pb) and pronounced
+    /// accordingly.
+    pub leading: FiniteF64,
+
     /// The elements of the annotation.
     pub elements: Vec<TextChunk>,
 }
@@ -153,7 +163,7 @@ impl Annotation {
         writer.write_all(b" BT")?;
         write!(writer, " 1 0 0 1 {} {} Tm", self.left, self.bottom)?;
         for element in &self.elements {
-            element.write_drawing_commands(&mut writer)?;
+            element.write_drawing_commands(&mut writer, self.font_size, self.leading)?;
         }
         writer.write_all(b" ET")?;
         Ok(())
@@ -223,20 +233,11 @@ pub struct TextChunk {
     /// The font variant to use.
     pub font_variant: FontVariant,
 
-    /// The size of the font, in points (72ths of an inch).
-    pub font_size: u64,
-
     /// Character spacing.
-    pub character_spacing: i64,
+    pub character_spacing: FiniteF64,
 
     /// Word spacing.
-    pub word_spacing: i64,
-
-    /// Leading (additional line spacing).
-    ///
-    /// Pronunciation tip: "leading" is derived from the chemical element lead (Pb) and pronounced
-    /// accordingly.
-    pub leading: i64,
+    pub word_spacing: FiniteF64,
 
     /// The language of this chunk, as a BCP 47 language tag, if it differs from the default
     /// document language.
@@ -264,7 +265,7 @@ pub struct TextChunk {
     pub expansion: Option<String>,
 }
 impl TextChunk {
-    pub fn write_drawing_commands<W: Write>(&self, mut writer: W) -> Result<(), io::Error> {
+    pub fn write_drawing_commands<W: Write>(&self, mut writer: W, font_size: NonZeroPositiveF64, leading: FiniteF64) -> Result<(), io::Error> {
         let need_span =
             self.language.is_some()
             || self.alternate_text.is_some()
@@ -272,17 +273,17 @@ impl TextChunk {
             || self.expansion.is_some();
 
         // pick the correct font
-        write!(writer, "/F{} {} Tf", self.font_variant.as_index(), self.font_size)?;
+        write!(writer, "/F{} {} Tf", self.font_variant.as_index(), font_size.get())?;
 
         // set some spacing settings
-        if self.character_spacing > 0 {
-            write!(writer, " {} Tc", self.character_spacing)?;
+        if self.character_spacing.get() != 0.0 {
+            write!(writer, " {} Tc", self.character_spacing.get())?;
         }
-        if self.word_spacing > 0 {
-            write!(writer, " {} Tw", self.word_spacing)?;
+        if self.word_spacing.get() != 0.0 {
+            write!(writer, " {} Tw", self.word_spacing.get())?;
         }
-        if self.leading > 0 {
-            write!(writer, " {} TL", self.leading)?;
+        if leading.get() != 0.0 {
+            write!(writer, " {} TL", leading.get())?;
         }
 
         // do not actually output the characters

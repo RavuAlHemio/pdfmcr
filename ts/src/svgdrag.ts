@@ -3,7 +3,7 @@ import { Position } from "./common";
 
 export namespace SvgDrag {
     let dragStart: Position|null = null;
-    let currentImageScale: number = 1.0;
+    export let currentImageScale: number = 1.0;
     let currentImageOffset: Position = { x: 0, y: 0 };
     const dragEvents: [string, any][] = [];
 

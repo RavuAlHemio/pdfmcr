@@ -17,7 +17,7 @@ use askama::Template;
 use clap::Parser;
 use rocket::{FromForm, Responder, uri};
 use rocket::form::Form;
-use rocket::fs::{relative, FileServer, TempFile};
+use rocket::fs::{FileServer, TempFile};
 use rocket::http::{ContentType, Status};
 use rocket::response::Redirect;
 use rocket::serde::json::Json;
@@ -34,6 +34,19 @@ use crate::model::{Annotation, Artifact, JpegImage, JpegImageInfo, Page};
 
 
 static WEB_FILE: OnceLock<RwLock<crate::model::File>> = OnceLock::new();
+
+
+macro_rules! path_from_components {
+    ($first_chunk:expr $(, $next_chunk:expr)* $(,)?) => {
+        {
+            let mut path = ::std::path::PathBuf::from($first_chunk);
+            $(
+                path.push($next_chunk);
+            )*
+            path
+        }
+    };
+}
 
 
 #[derive(Parser)]
@@ -391,6 +404,8 @@ fn launch_rocket() -> _ {
         .expect("WEB_FILE already set?!");
 
     // now, let's get down to brass tacks
+    let static_path = path_from_components!("static");
+    let ts_dist_path = path_from_components!("ts", "dist");
 
     rocket::build()
         .mount("/", rocket::routes![
@@ -400,6 +415,6 @@ fn launch_rocket() -> _ {
             make_page,
             set_page_annotations,
         ])
-        .mount("/static", FileServer::from(relative!("static")).rank(2))
-        .mount("/static/js", FileServer::from(relative!("ts/dist")).rank(1))
+        .mount("/static", FileServer::from(&static_path).rank(2))
+        .mount("/static/js", FileServer::from(&ts_dist_path).rank(1))
 }
